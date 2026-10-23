@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>观看 · 抄好搭</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #000;
+        --panel: #0c0c0f;
+        --line: #202026;
+        --muted: #8a8a94;
+        --soft: #b8b8c2;
+        --accent: #ff3b5c;
+        --bar: calc(52px + env(safe-area-inset-top));
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      [hidden] { display: none !important; }
+      html, body { margin: 0; padding: 0; background: var(--bg); }
+      body {
+        color: #f4f4f6;
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        min-height: 100dvh;
+        overscroll-behavior-y: contain;
+      }
+      button { font: inherit; color: inherit; }
+      .page { max-width: 720px; margin: 0 auto; min-height: 100dvh; padding-top: var(--bar); }
+
+      /* 顶部栏：始终在页面顶部，不压在视频中间 */
+      .appbar {
+        position: fixed; inset: 0 0 auto 0; z-index: 40;
+        height: var(--bar);
+        padding: env(safe-area-inset-top) 8px 0;
+        display: flex; align-items: center; gap: 6px;
+        background: rgba(0, 0, 0, 0.92);
+        border-bottom: 1px solid #ffffff0d;
+        backdrop-filter: blur(16px);
+      }
+      .bar-btn {
+        width: 42px; height: 42px; flex: none;
+        display: grid; place-items: center;
+        border: 0; border-radius: 50%;
+        background: transparent; color: #fff;
+      }
+      .bar-btn:active { background: #ffffff14; }
+      .bar-btn svg { width: 23px; height: 23px; }
+      .bar-main { flex: 1; min-width: 0; padding: 0 4px; }
+      .bar-title { display: flex; align-items: center; gap: 7px; }
+      .bar-title strong {
+        min-width: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .bar-sub { display: block; margin-top: 1px; color: var(--muted); font-size: 10.5px; }
+      .live-dot {
+        flex: none; display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 7px; border-radius: 999px;
+        background: #ff3b5c; color: #fff; font-size: 9.5px; font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      .live-dot i { width: 5px; height: 5px; border-radius: 50%; background: #fff; animation: pulse 1.4s infinite; }
+      @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+      /* 视频区 */
+      .stage {
+        position: relative; width: 100%; aspect-ratio: 16 / 9;
+        background: #050506; overflow: hidden;
+      }
+      .stage #player { position: absolute; inset: 0; }
+      .stage video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+      .loading {
+        position: absolute; inset: 0; z-index: 4;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+        color: #8f8f9a; font-size: 12px; background: #050506e8;
+      }
+      .spinner {
+        width: 28px; height: 28px; border-radius: 50%;
+        border: 2px solid #ffffff1c; border-top-color: #ffffffcc;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .play-overlay {
+        position: absolute; inset: 0; z-index: 3;
+        display: grid; place-items: center;
+        border: 0; background: transparent; color: #fff;
+      }
+      .play-circle {
+        width: 64px; height: 64px; border-radius: 50%;
+        display: grid; place-items: center;
+        background: #00000073; border: 1px solid #ffffff40;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 10px 30px #00000066;
+        transition: transform 0.18s ease, background 0.18s ease;
+      }
+      .play-overlay:active .play-circle { transform: scale(0.94); background: #000000a6; }
+      .play-circle svg { width: 26px; height: 26px; margin-left: 3px; }
+      .play-overlay[hidden] { display: none; }
+
+      /* 视频下方信息 */
+      .video-tools {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 9px 14px; color: var(--muted); font-size: 11.5px;
+        border-bottom: 1px solid #141418;
+      }
+      .video-tools .tools-left { display: flex; align-items: center; gap: 8px; }
+      .video-tools button {
+        display: inline-flex; align-items: center; gap: 5px;
+        border: 0; background: transparent; color: var(--soft); font-size: 11.5px;
+      }
+      .video-tools button svg { width: 15px; height: 15px; }
+      .video-tools .live-now { color: #ff6b81; font-weight: 600; }
+
+      .info { padding: 15px 16px 28px; }
+      .title { margin: 0 0 8px; font-size: 19px; line-height: 1.45; font-weight: 600; letter-spacing: -0.01em; }
+      .stats-line { color: var(--muted); font-size: 11.5px; display: flex; align-items: center; gap: 6px; }
+      .stats-line b { color: #d6d6dc; font-weight: 500; }
+
+      .author-row {
+        display: flex; align-items: center; gap: 10px;
+        margin: 14px 0 2px;
+      }
+      .avatar {
+        width: 38px; height: 38px; border-radius: 50%; flex: none;
+        display: grid; place-items: center;
+        background: linear-gradient(140deg, #3b3b44, #1d1d24);
+        border: 1px solid #ffffff14;
+        color: #fff; font-weight: 700; font-size: 14px;
+      }
+      .author-meta { flex: 1; min-width: 0; }
+      .author-meta strong { display: block; font-size: 13.5px; font-weight: 600; }
+      .author-meta span { color: var(--muted); font-size: 11px; }
+      .follow-btn {
+        flex: none; height: 30px; padding: 0 14px;
+        border-radius: 999px; border: 1px solid #ffffff2e;
+        background: #ffffff0f; color: #fff; font-size: 12px;
+      }
+      .follow-btn.on { background: #ffffff1a; color: var(--muted); border-color: transparent; }
+
+      .share-row {
+        display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+        margin: 2px 0 12px;
+      }
+      .metric {
+        display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+        min-width: 52px; border: 0; background: transparent; color: var(--soft);
+        font-size: 10px; padding: 5px 4px;
+      }
+      .metric svg { width: 21px; height: 21px; }
+      .metric.on { color: var(--accent); }
+      .metric.on svg { fill: currentColor; stroke: currentColor; }
+
+      .desc {
+        color: #c9c9d1; font-size: 13px; line-height: 1.75;
+        padding: 12px 13px; border-radius: 10px;
+        background: #0d0d11; border: 1px solid #1a1a20;
+      }
+      .status {
+        margin-top: 10px; padding: 9px 11px; border-radius: 9px;
+        background: #0d0d11; border: 1px solid #1a1a20;
+        color: var(--muted); font-size: 11.5px; line-height: 1.7;
+      }
+      .status.error { border-color: #4a2328; background: #1a1012; color: #f0a3a3; }
+      .status:empty { display: none; }
+      .status button {
+        margin-left: 6px; border: 1px solid #ffffff2b; background: transparent;
+        color: #fff; border-radius: 999px; padding: 3px 10px; font-size: 11px;
+      }
+
+      /* 直播聊天 */
+      .chat { padding: 4px 16px 90px; }
+      .chat-head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 12px 0 8px; color: var(--muted); font-size: 11.5px;
+        border-top: 1px solid #17171c;
+      }
+      .chat-title { color: #fff; font-size: 12px; font-weight: 600; }
+      .chat-list { display: flex; flex-direction: column; gap: 9px; }
+      .chat-msg { display: flex; gap: 8px; font-size: 12.5px; line-height: 1.6; color: #d6d6dc; }
+      .chat-msg b { flex: none; color: #8f8f9a; font-weight: 500; }
+      .chat-msg.system {
+        padding: 9px 11px; border-radius: 9px; background: #0c0c10;
+        border: 1px solid #17171c; color: #83838d; font-size: 11.5px;
+      }
+      .live-dock {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        display: flex; align-items: center; gap: 8px;
+        background: #0b0b0eed; border-top: 1px solid #ffffff0d;
+        backdrop-filter: blur(16px);
+      }
+      .live-dock .dock-input {
+        flex: 1; min-width: 0; height: 38px; padding: 0 13px;
+        border-radius: 999px; border: 1px solid #ffffff14;
+        background: #ffffff0b; color: #fff; outline: none; font-size: 13px;
+      }
+      .live-dock .dock-input::placeholder { color: #6f6f79; }
+      .dock-btn {
+        width: 38px; height: 38px; flex: none; border-radius: 50%;
+        display: grid; place-items: center;
+        border: 1px solid #ffffff14; background: #ffffff0b; color: #fff;
+      }
+      .dock-btn svg { width: 19px; height: 19px; }
+      .dock-btn.on { color: var(--accent); }
+
+      .note { margin: 14px 0 0; padding: 11px 13px; border-radius: 10px; background: #0c0c10; border: 1px solid #18181e; }
+      .note summary { color: #85858f; font-size: 11.5px; cursor: pointer; outline: none; }
+      .note p { margin: 7px 0 0; color: #73737d; font-size: 11px; line-height: 1.75; }
+      .is-live .foot { display: none; }
+      .foot { margin-top: 18px; color: #5f5f68; font-size: 10.5px; line-height: 1.8; }
+
+      .toast {
+        position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom));
+        transform: translateX(-50%); z-index: 60;
+        padding: 9px 16px; border-radius: 10px;
+        background: #ffffff17; color: #f2f2f6; font-size: 12px;
+        backdrop-filter: blur(10px); opacity: 0; transition: opacity .2s;
+        pointer-events: none; white-space: nowrap;
+      }
+      .toast.show { opacity: 1; }
+
+      @media (min-width: 640px) {
+        .stage { border-radius: 0 0 12px 12px; }
+        .info { padding-left: 20px; padding-right: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="appbar">
+      <button class="bar-btn" id="backBtn" type="button" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 5 8 12l7 7" />
+        </svg>
+      </button>
+      <div class="bar-main">
+        <div class="bar-title">
+          <strong id="barTitle">观看</strong>
+          <span class="live-dot" id="liveBadge" hidden><i></i>直播中</span>
+        </div>
+        <span class="bar-sub" id="barSub">抄好搭</span>
+      </div>
+      <button class="bar-btn" id="shareTop" type="button" aria-label="分享">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 15V3m0 0L8 7m4-4 4 4" />
+          <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+        </svg>
+      </button>
+    </header>
+
+    <main class="page">
+      <div class="stage" id="stage">
+        <div id="player"></div>
+        <div class="loading" id="loading">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="loadingText">播放器加载中…</span>
+        </div>
+        <button class="play-overlay" id="playOverlay" type="button" hidden aria-label="播放">
+          <span class="play-circle">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6L19 12 8 5.2Z" /></svg>
+          </span>
+        </button>
+      </div>
+
+      <div class="video-tools" id="videoTools">
+        <span class="tools-left" id="toolsLeft">视频</span>
+        <span class="tools-right">
+          <button type="button" id="fullscreenBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+              <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
+            </svg>
+            全屏
+          </button>
+        </span>
+      </div>
+
+      <section class="info">
+        <h1 class="title" id="title">观看</h1>
+        <div class="author-row">
+          <span class="avatar" id="avatar">直</span>
+          <div class="author-meta">
+            <strong id="author">主办方</strong>
+            <span id="subline">保利威提供播放服务</span>
+          </div>
+        </div>
+
+        <div class="status" id="status" role="status"></div>
+      </section>
+
+      <section class="chat" id="chat" hidden>
+        <div class="chat-head"><span class="chat-title">聊天</span><span id="chatHint">和大家一起聊</span></div>
+        <div class="chat-list" id="chatList">
+          <p class="chat-msg system">欢迎来到直播间。</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="live-dock" id="liveDock" hidden>
+      <input class="dock-input" id="chatInput" type="text" maxlength="80" placeholder="聊一聊…" />
+      <button class="dock-btn" id="dockSend" type="button" aria-label="发送">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12 20 4l-4 16-4-6-8-2Z" /></svg>
+      </button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      const params = new URLSearchParams(location.search)
+      const type = ['vod', 'file', 'live'].includes(params.get('type')) ? params.get('type') : 'live'
+      const channelId = params.get('channelId') || ''
+      const vid = params.get('vid') || ''
+      let fileUrl = params.get('url') || ''
+      const title = params.get('title') || (type === 'live' ? '直播观看' : '视频观看')
+      const explicitPlaysafe = params.get('playsafe') || ''
+      const isLive = type === 'live'
+
+      document.title = title + ' · 抄好搭'
+      document.body.classList.toggle('is-live', isLive)
+      document.getElementById('barTitle').textContent = title
+      document.getElementById('barSub').textContent = isLive ? '保利威直播' : type === 'vod' ? '保利威点播' : '视频播放'
+      document.getElementById('title').textContent = title
+      document.getElementById('avatar').textContent = (title || '直').trim().charAt(0)
+      document.getElementById('author').textContent = isLive ? '直播主办方' : '内容发布方'
+      document.getElementById('subline').textContent = isLive ? '实时直播' : '保利威点播 · 视频播放'
+
+      if (isLive) {
+        document.getElementById('chat').hidden = false
+        document.getElementById('liveDock').hidden = false
+        document.getElementById('toolsLeft').innerHTML = '<span>直播</span>'
+      }
+
+      const loadingEl = document.getElementById('loading')
+      const loadingText = document.getElementById('loadingText')
+      const statusEl = document.getElementById('status')
+      const playOverlay = document.getElementById('playOverlay')
+      const playerEl = document.getElementById('player')
+      document.getElementById('stage').addEventListener('click', () => {
+        if (statusEl.textContent.includes('点击视频')) setStatus('')
+      }, true)
+
+      function setStatus(text, isError) {
+        statusEl.textContent = text || ''
+        statusEl.classList.toggle('error', Boolean(isError))
+      }
+      function ready(text) {
+        loadingEl.style.display = 'none'
+        setStatus(text || '')
+      }
+      function fail(text) {
+        loadingEl.style.display = 'none'
+        statusEl.textContent = ''
+        statusEl.classList.add('error')
+        const span = document.createElement('span')
+        span.textContent = text
+        statusEl.append(span)
+        const retry = document.createElement('button')
+        retry.type = 'button'
+        retry.textContent = '重试'
+        retry.onclick = () => location.reload()
+        statusEl.append(retry)
+      }
+      function toast(text) {
+        const el = document.getElementById('toast')
+        el.textContent = text
+        el.classList.add('show')
+        clearTimeout(el._timer)
+        el._timer = setTimeout(() => el.classList.remove('show'), 1800)
+      }
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = src
+          script.async = true
+          const timer = setTimeout(() => {
+            script.remove()
+            reject(new Error('加载超时'))
+          }, 15000)
+          script.onload = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+          script.onerror = () => {
+            clearTimeout(timer)
+            reject(new Error('脚本加载失败，请检查网络'))
+          }
+          document.head.append(script)
+        })
+      }
+      function viewerId() {
+        const key = 'chaohaoda-viewer'
+        let id = localStorage.getItem(key)
+        if (!id) {
+          id = 'v-' + Math.random().toString(36).slice(2, 10)
+          localStorage.setItem(key, id)
+        }
+        return id
+      }
+      async function share() {
+        const url = location.href
+        try {
+          if (navigator.share) {
+            await navigator.share({ title, url })
+            return
+          }
+          await navigator.clipboard.writeText(url)
+          toast('链接已复制')
+        } catch {
+          toast('复制失败，请手动复制地址栏链接')
+        }
+      }
+      function goBack() {
+        if (window.parent !== window) {
+          parent.postMessage({ type: 'watch:close' }, location.origin)
+          return
+        }
+        if (history.length > 1) history.back()
+        else location.href = '/'
+      }
+      document.getElementById('backBtn').onclick = goBack
+      document.getElementById('shareTop').onclick = share
+
+      document.getElementById('fullscreenBtn').onclick = () => {
+        const stage = document.getElementById('stage')
+        const video = stage.querySelector('video')
+        if (video && video.webkitEnterFullscreen) video.webkitEnterFullscreen()
+        else if (document.fullscreenElement) document.exitFullscreen()
+        else stage.requestFullscreen?.().catch(() => toast('当前浏览器不支持全屏'))
+      }
+
+      const chatInput = document.getElementById('chatInput')
+      const chatList = document.getElementById('chatList')
+      let liveChatCore = null
+
+      function appendChat(nick, content, system = false) {
+        const row = document.createElement('p')
+        row.className = system ? 'chat-msg system' : 'chat-msg'
+        const name = document.createElement('b')
+        name.textContent = nick
+        const text = document.createElement('span')
+        text.textContent = content
+        row.append(name, text)
+        chatList.append(row)
+        chatList.scrollTop = chatList.scrollHeight
+      }
+
+      async function sendChat() {
+        const value = chatInput.value.trim()
+        if (!value) return
+        if (liveChatCore) {
+          try {
+            await liveChatCore.chat.sendSpeakMsg({ content: value })
+            chatInput.value = ''
+            return
+          } catch {
+            /* SDK 不可用时退回本地输入 */
+          }
+        }
+        appendChat('我', value)
+        chatInput.value = ''
+      }
+      document.getElementById('dockSend').onclick = sendChat
+      chatInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') sendChat()
+      })
+
+      function formatDuration(seconds) {
+        const total = Math.max(0, Math.round(seconds))
+        const h = Math.floor(total / 3600)
+        const m = Math.floor((total % 3600) / 60)
+        const s = total % 60
+        return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0')
+      }
+
+      async function initFile() {
+        if (!fileUrl) return fail('视频暂时无法播放，请稍后重试。')
+        loadingText.textContent = '视频加载中…'
+        const video = document.createElement('video')
+        video.src = fileUrl
+        video.controls = true
+        video.playsInline = true
+        video.preload = 'metadata'
+        video.addEventListener('loadedmetadata', () => {
+          ready('')
+          document.getElementById('toolsLeft').innerHTML =
+            '<span>' + (video.duration ? formatDuration(video.duration) : '视频') + '</span>'
+        })
+        video.addEventListener('error', () => fail('视频暂时无法播放，请稍后重试。'))
+        video.addEventListener('playing', () => { playOverlay.hidden = true })
+        video.addEventListener('pause', () => { if (video.currentTime === 0) playOverlay.hidden = false })
+        playerEl.append(video)
+        playOverlay.hidden = false
+        playOverlay.onclick = async () => {
+          try {
+            await video.play()
+            playOverlay.hidden = true
+          } catch {
+            toast('点击视频继续播放')
+          }
+        }
+      }
+
+      async function loadPlayerScript() {
+        const urls = [
+          '/vendor/polyv-player.js',
+          'https://player.polyv.net/resp/vod-player/latest/player.js',
+          'https://player.polyv.net/script/player.js',
+        ]
+        for (const url of urls) {
+          try {
+            await loadScript(url)
+            if (typeof window.polyvPlayer === 'function' || typeof window.PolyvPlayer === 'function') return
+          } catch {
+            /* 尝试下一个地址 */
+          }
+        }
+        throw new Error('播放器脚本加载失败')
+      }
+
+      async function initVod() {
+        if (!vid) return fail('视频暂时无法播放，请稍后重试。')
+        loadingText.textContent = '点播播放器加载中…'
+        await loadPlayerScript()
+        let playsafe = explicitPlaysafe
+        if (!playsafe) {
+          try {
+            const response = await fetch('/api/polyv/playsafe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ vid, viewerId: viewerId() }),
+              signal: AbortSignal.timeout(8000),
+            })
+            const data = await response.json()
+            if (response.ok && data.token) playsafe = data.token
+          } catch {
+            /* 未配置凭证时按普通视频处理 */
+          }
+        }
+        const options = {
+          wrap: '#player', width: '100%', height: '100%', vid,
+          autoplay: false, playsafe: playsafe || undefined,
+        }
+        try {
+          if (typeof window.PolyvPlayer === 'function') window.__polyvPlayer = new window.PolyvPlayer(options)
+          else if (typeof window.polyvPlayer === 'function') window.__polyvPlayer = window.polyvPlayer(options)
+          else throw new Error('点播播放器未加载')
+          ready('')
+          document.getElementById('toolsLeft').innerHTML = '<span>点播视频</span>'
+          const player = window.__polyvPlayer
+          player?.on?.('error', () => fail('视频暂时无法播放，请稍后重试。'))
+          const started = Date.now()
+          const watchdog = setInterval(() => {
+            const video = document.querySelector('#player video')
+            if (video && video.readyState > 0) {
+              clearInterval(watchdog)
+              return
+            }
+            if (Date.now() - started > 20000) {
+              clearInterval(watchdog)
+              fail('视频暂时无法播放，请稍后重试。')
+            }
+          }, 1000)
+        } catch (error) {
+          fail('视频暂时无法播放，请稍后重试。')
+        }
+      }
+
+      async function setupLiveChat() {
+        if (type !== 'live' || !channelId) return
+        try {
+          await loadScript('/vendor/polyv-live-watch-sdk.js')
+          const sdk = window.PolyvLiveWatchSDK
+          if (!sdk) return
+          const core = sdk.createWatchCore({
+            channelId,
+            userInfo: { userId: viewerId(), nick: '访客' + viewerId().slice(-4) },
+          })
+          await core.setup()
+          if (!core.auth.isAuthorized()) {
+            const result = await core.auth.verifyNoneAuth()
+            if (!result.success) return
+            await core.setup()
+          }
+          core.chat.eventEmitter.on(sdk.ChatEvents.ChatMessage, ({ chatMsg }) => {
+            if (!chatMsg || !chatMsg.content) return
+            if (chatMsg.msgSource !== 'speak' && chatMsg.msgSource !== 'system') return
+            appendChat(chatMsg.user?.nick || '直播间', chatMsg.content, chatMsg.msgSource === 'system')
+          })
+          await core.connect()
+          liveChatCore = core
+          const history = await core.chat.getChatHistoryByTime({
+            mode: sdk.ChatRequestHistoryMode.Prev,
+          })
+          if (Array.isArray(history) && history.length) {
+            chatList.innerHTML = ''
+            history.forEach((msg) => {
+              if (!msg.content) return
+              if (msg.msgSource !== 'speak' && msg.msgSource !== 'system') return
+              appendChat(msg.user?.nick || '直播间', msg.content, msg.msgSource === 'system')
+            })
+          }
+        } catch {
+          /* 未开播或频道不允许游客聊天时保留本地输入 */
+        }
+      }
+
+      async function initLive() {
+        if (!channelId) return fail('直播暂时无法播放，请稍后重试。')
+        loadingText.textContent = '直播加载中…'
+        try {
+          const channelRes = await fetch('/api/polyv/channel?channelId=' + encodeURIComponent(channelId))
+          if (channelRes.ok) {
+            const channel = await channelRes.json()
+            if (String(channel.status || '').includes('回放')) {
+              const playbackRes = await fetch('/api/polyv/playback?channelId=' + encodeURIComponent(channelId))
+              if (playbackRes.ok) {
+                const playback = await playbackRes.json()
+                const item = (playback.items || []).find((entry) => entry.mp4)
+                if (item?.mp4) {
+                  fileUrl = item.mp4
+                  document.getElementById('barSub').textContent = '保利威回放'
+                  document.getElementById('subline').textContent = '直播回放'
+                  document.getElementById('toolsLeft').innerHTML = '<span>回放视频</span>'
+                  await initFile()
+                  setupLiveChat()
+                  return
+                }
+              }
+            }
+          }
+        } catch {
+          /* 状态或回放列表不可用时继续尝试直播播放器 */
+        }
+        let uid = ''
+        try {
+          const response = await fetch('/api/polyv/status')
+          if (response.ok) {
+            const data = await response.json()
+            uid = data.userId || ''
+          }
+        } catch {
+          /* 没有账号信息时退回官方观看页 */
+        }
+        const src = uid
+          ? 'https://s1.videocc.net/live-only-video/polyv-live-video.html?uid=' +
+            encodeURIComponent(uid) +
+            '&vid=' +
+            encodeURIComponent(channelId)
+          : 'https://live.polyv.cn/watch/' + encodeURIComponent(channelId) + '?hasFrame=1'
+        playerEl.innerHTML =
+          '<iframe src="' +
+          src +
+          '" style="width:100%;height:100%;border:0" allow="autoplay; fullscreen; encrypted-media; microphone; camera" allowfullscreen></iframe>'
+        ready('')
+        setupLiveChat()
+      }
+
+      ;(async () => {
+        try {
+          if (type === 'file') await initFile()
+          else if (type === 'vod') await initVod()
+          else await initLive()
+        } catch (error) {
+          fail('视频暂时无法播放，请稍后重试。')
+          if (isLive && channelId) {
+            playerEl.innerHTML =
+              '<iframe src="https://live.polyv.cn/watch/' +
+              encodeURIComponent(channelId) +
+              '?hasFrame=1" style="width:100%;height:100%;border:0" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>'
+          }
+        }
+      })()
+    </script>
+  </body>
+</html>
